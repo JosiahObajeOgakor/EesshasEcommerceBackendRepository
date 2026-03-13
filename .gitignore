@@ -1,0 +1,21 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# IDE and tooling
+.vs/
+.vscode/
+.idea/
+
+# Python virtual env
+.venv/
+venv/
+
+# Logs and temp files
+*.log
+*.tmp
+*.cache
+
+# OS files
+.DS_Store
+Thumbs.db

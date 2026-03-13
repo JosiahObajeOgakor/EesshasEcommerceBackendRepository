@@ -1,0 +1,35 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: easshas_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: easshas_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  api:
+    build:
+      context: ./src/Easshas.WebApi
+      dockerfile: Dockerfile
+    container_name: easshas_api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Postgres: Host=db;Port=5432;Database=easshas_dev;Username=postgres;Password=postgres
+      Jwt__Key: jnvejcjw9-r94953tfmnnfnjmdjhgjcjqkdmaokmve040-4ug394h82-=[]'f']\/;g/.lfpeiwua00cheut0
+      Jwt__Issuer: https://eeshasgloss.com, http://localhost:3000
+      Jwt__Audience: https://eeshasgloss.com, http://localhost:3000
+      Paystack__SecretKey: sk_test_fff5925387660228e33df6c069f4f6d2eb81b2aa
+      AWS__Region: us-east-1
+      Email__From: no-reply@local.test
+      Email__Admin: admin@local.test
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    restart: on-failure
+volumes:
+  pgdata: {}
