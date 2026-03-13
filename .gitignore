@@ -11,6 +11,9 @@
 .venv/
 venv/
 
+# Local secrets
+.env
+
 # Logs and temp files
 *.log
 *.tmp
