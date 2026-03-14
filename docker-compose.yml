@@ -13,8 +13,8 @@ services:
       - pgdata:/var/lib/postgresql/data
   api:
     build:
-      context: ./src/Easshas.WebApi
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/Easshas.WebApi/Dockerfile
     container_name: easshas_api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
