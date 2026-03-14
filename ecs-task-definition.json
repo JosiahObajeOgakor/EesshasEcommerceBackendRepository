@@ -1,0 +1,114 @@
+{
+  "family": "easshas-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "easshas-api",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/easshas-api:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        { "name": "ASPNETCORE_ENVIRONMENT", "value": "Production" },
+        { "name": "ASPNETCORE_URLS", "value": "http://+:8080" },
+        { "name": "AWS__Region", "value": "us-east-2" },
+        { "name": "AWS__Bucket", "value": "anythingais3bucket" },
+        { "name": "App__SeedOnStartup", "value": "false" },
+        { "name": "App__Reconciliation__Enabled", "value": "false" },
+        { "name": "App__Reconciliation__IntervalSeconds", "value": "300" },
+        { "name": "App__Reconciliation__MinAgeMinutes", "value": "10" },
+        { "name": "App__Inventory__LowStockThreshold", "value": "5" },
+        { "name": "App__RateLimiting__Anonymous__PermitLimit", "value": "60" },
+        { "name": "App__RateLimiting__Anonymous__WindowSeconds", "value": "60" },
+        { "name": "Jwt__Issuer", "value": "https://eeshasgloss.com" },
+        { "name": "Jwt__Audience", "value": "https://eeshasgloss.com" },
+        { "name": "Jwt__ExpiryMinutes", "value": "60" },
+        { "name": "Jwt__CookieName", "value": "access_token" },
+        { "name": "Cors__Origins__0", "value": "https://eeshasgloss.com" },
+        { "name": "Email__Provider", "value": "Zoho" },
+        { "name": "WhatsApp__Enabled", "value": "true" },
+        { "name": "WhatsApp__Provider", "value": "Meta" },
+        { "name": "WhatsApp__RequireSubscription", "value": "true" },
+        { "name": "App__AI__Provider", "value": "OpenAI" },
+        { "name": "App__AI__Model", "value": "gpt-4.1" }
+      ],
+      "secrets": [
+        {
+          "name": "ConnectionStrings__Postgres",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/postgres:connection_string::"
+        },
+        {
+          "name": "Jwt__Key",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/jwt:key::"
+        },
+        {
+          "name": "Paystack__SecretKey",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/paystack:secret_key::"
+        },
+        {
+          "name": "Paystack__PublicKey",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/paystack:public_key::"
+        },
+        {
+          "name": "AWS__AccessKey",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/aws:access_key::"
+        },
+        {
+          "name": "AWS__SecretKey",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/aws:secret_key::"
+        },
+        {
+          "name": "Email__From",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/SES:from::"
+        },
+        {
+          "name": "Email__Smtp__Password",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/SES:smtp_password::"
+        },
+        {
+          "name": "WhatsApp__AccessToken",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/whatsapp:access_token::"
+        },
+        {
+          "name": "WhatsApp__PhoneNumberId",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/whatsapp:phone_number_id::"
+        },
+        {
+          "name": "App__AI__ApiKey",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/openai:api_key::"
+        },
+        {
+          "name": "Contacts__Auth__Password",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:ACCOUNT_ID:secret:prod/easshas/contacts:password::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/easshas-api",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8080/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

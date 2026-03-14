@@ -22,15 +22,15 @@ Prereqs:
 
 Run with Docker Compose:
 ```bash
-cd C:/Users/Josiah.Obaje/source/repos/JosiahCourses/easshasbackend
-set PAYSTACK_TEST_SECRET_KEY=sk_test_xxx
+# from the repository root
+cp .env.example .env   # fill in your values
 docker compose up --build
 ```
 API: http://localhost:8080
 
 Or run with dotnet:
 ```bash
-cd C:/Users/Josiah.Obaje/source/repos/JosiahCourses/easshasbackend
+# from the repository root
 # start postgres first or adjust ConnectionStrings__Postgres env var
 set ASPNETCORE_ENVIRONMENT=Development
 cd src/Easshas.WebApi
@@ -139,20 +139,118 @@ Response: `{ orderId, amount, currency, authorizationUrl, reference }`
 - Configure webhooks with your server URL and verify x-paystack-signature.
 - Prefer webhook as canonical source of truth; callback/verify are user-experience helpers.
 
-## AWS Deployment (Overview)
-- Build Docker image for WebApi
-- Push to ECR
-- Provision RDS PostgreSQL
-- Store secrets in AWS Secrets Manager (DB, Paystack, JWT key)
-- Deploy on ECS Fargate or Elastic Beanstalk (Docker)
-- Configure ALB with HTTPS, forward to container port 8080
-- Set env vars:
-  - ConnectionStrings__Postgres
-  - Jwt__Key/Issuer/Audience/CookieName
-  - Paystack__SecretKey
-  - Email__From, Email__Admin
-  - AWS__Region
-  - Admin__Username, Admin__Password, Admin__Email (optional)
+## AWS Deployment
+
+The repository ships with a GitHub Actions workflow (`.github/workflows/deploy-aws.yml`) that
+automatically **builds, tests, and deploys** the API to AWS ECS Fargate on every push to `main`.
+
+### Prerequisites
+
+| Resource | Notes |
+|----------|-------|
+| AWS Account | `us-east-2` region (matches existing RDS) |
+| Amazon ECR repository | Stores Docker images |
+| Amazon ECS Cluster + Service | Runs the Fargate containers |
+| AWS RDS PostgreSQL | Already configured in `appsettings.Production.json` |
+| AWS Secrets Manager | Stores all sensitive configuration |
+| IAM roles | `ecsTaskExecutionRole` (pull from ECR + read Secrets Manager) and `ecsTaskRole` (S3 access) |
+
+### One-time setup
+
+**1. Create the ECS task definition**
+
+Edit `ecs-task-definition.json`, replace every `ACCOUNT_ID` placeholder with your AWS account ID,
+update the Secrets Manager ARNs if needed, then register the task definition:
+```bash
+aws ecs register-task-definition --cli-input-json file://ecs-task-definition.json
+```
+
+**2. Create the CloudWatch log group**
+```bash
+aws logs create-log-group --log-group-name /ecs/easshas-api --region us-east-2
+```
+
+**3. Store secrets in AWS Secrets Manager**
+
+The task definition references the following secrets (create each as a JSON key/value in Secrets Manager):
+```bash
+# PostgreSQL connection string
+aws secretsmanager create-secret --name prod/easshas/postgres \
+  --secret-string '{"connection_string":"Host=...;Port=5432;Database=postgres;..."}'
+
+# JWT signing key
+aws secretsmanager create-secret --name prod/easshas/jwt \
+  --secret-string '{"key":"<256-bit-secret>"}'
+
+# Paystack API keys
+aws secretsmanager create-secret --name prod/easshas/paystack \
+  --secret-string '{"secret_key":"sk_live_...","public_key":"pk_live_..."}'
+
+# AWS S3 / SES credentials
+aws secretsmanager create-secret --name prod/easshas/aws \
+  --secret-string '{"access_key":"AKIA...","secret_key":"..."}'
+
+# Email (SES / Zoho SMTP)
+aws secretsmanager create-secret --name prod/SES \
+  --secret-string '{"from":"no-reply@your-domain.com","smtp_password":"..."}'
+
+# WhatsApp (Meta)
+aws secretsmanager create-secret --name prod/easshas/whatsapp \
+  --secret-string '{"access_token":"...","phone_number_id":"..."}'
+
+# OpenAI
+aws secretsmanager create-secret --name prod/easshas/openai \
+  --secret-string '{"api_key":"sk-..."}'
+
+# Contacts API basic auth
+aws secretsmanager create-secret --name prod/easshas/contacts \
+  --secret-string '{"password":"<contacts-api-password>"}'
+```
+
+**4. Add GitHub repository secrets**
+
+In your GitHub repository → *Settings → Secrets and variables → Actions*, add:
+
+| Secret | Value |
+|--------|-------|
+| `AWS_ACCESS_KEY_ID` | IAM user access key (CI/CD deploy user) |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
+| `ECR_REPOSITORY` | ECR repository name (e.g. `easshas-api`) |
+| `ECS_CLUSTER` | ECS cluster name (e.g. `easshas-cluster`) |
+| `ECS_SERVICE` | ECS service name (e.g. `easshas-api`) |
+| `CONTAINER_NAME` | Container name in task definition (`easshas-api`) |
+
+**5. Configure the ALB and ECS Service**
+
+- Create an Application Load Balancer (HTTPS, port 443) forwarding to the container on port **8080**.
+- Add your production domain to the `Cors__Origins` environment variable in the task definition.
+- Set `ASPNETCORE_ENVIRONMENT=Production` (already in the task definition template).
+
+### CI/CD flow
+
+```
+Push to main
+  → GitHub Actions: dotnet test
+  → Docker build (from repo root, Dockerfile at src/Easshas.WebApi/Dockerfile)
+  → Push image to ECR (tagged with git SHA + latest)
+  → Download current ECS task definition
+  → Render new task definition with updated image
+  → Deploy to ECS service (waits for stability)
+```
+
+### Local Docker build
+
+The Dockerfile requires the **repository root** as the build context (it copies the entire solution):
+```bash
+# from the repository root
+docker build -f src/Easshas.WebApi/Dockerfile -t easshas-api .
+```
+
+Or use Docker Compose (also runs a local Postgres):
+```bash
+cp .env.example .env   # fill in your values
+docker compose up --build
+```
 
 ## Notes
 - Ensure HTTPS is enforced in production; cookies are Secure and SameSite=None by default.
