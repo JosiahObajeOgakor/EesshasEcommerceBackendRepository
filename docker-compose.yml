@@ -11,13 +11,20 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   api:
     build:
-      context: ./src/Easshas.WebApi
-      dockerfile: Dockerfile
+      # Build context is the repository root so the Dockerfile can access
+      # EasshasBackend.sln and all src/* projects.
+      context: .
+      dockerfile: src/Easshas.WebApi/Dockerfile
     container_name: easshas_api
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Postgres: ${CONNECTIONSTRINGS_POSTGRES}
       Jwt__Key: ${JWT_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
@@ -29,8 +36,17 @@ services:
       App__AI__ApiKey: ${OPENAI_API_KEY}
       Email__From: ${EMAIL_FROM}
       Email__Admin: ${EMAIL_ADMIN}
+      Email__Smtp__Host: ${EMAIL_SMTP_HOST}
+      Email__Smtp__Port: ${EMAIL_SMTP_PORT:-465}
+      Email__Smtp__Username: ${EMAIL_SMTP_USERNAME}
+      Email__Smtp__Password: ${EMAIL_SMTP_PASSWORD}
+      Email__Smtp__UseStartTls: ${EMAIL_SMTP_USE_STARTTLS:-true}
+      Contacts__Auth__Username: ${CONTACTS_AUTH_USERNAME}
+      Contacts__Auth__Password: ${CONTACTS_AUTH_PASSWORD}
+      Cors__Origins__0: ${CORS_ORIGIN_0}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8080:8080"
     restart: on-failure

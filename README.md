@@ -4,7 +4,7 @@ A Domain-Driven Design ASP.NET Core Web API for:
 - Admin auth + product management (POST/GET/PUT)
 - User signup/signin with JWT in HttpOnly cookies
 - Orders + Paystack payment init/verify
-- Email notifications (AWS SES)
+- Email notifications (Zoho SMTP / AWS SES)
 - Real-time tracking with SignalR
 - PostgreSQL persistence
 
@@ -20,46 +20,115 @@ Prereqs:
 - .NET SDK 8
 - Docker (for Postgres) or local Postgres
 
-Run with Docker Compose:
+Run with Docker Compose (local):
 ```bash
-cd C:/Users/Josiah.Obaje/source/repos/JosiahCourses/easshasbackend
-set PAYSTACK_TEST_SECRET_KEY=sk_test_xxx
+# From the repository root
+cp .env.example .env          # then fill in real values
 docker compose up --build
 ```
 API: http://localhost:8080
 
 Or run with dotnet:
 ```bash
-cd C:/Users/Josiah.Obaje/source/repos/JosiahCourses/easshasbackend
 # start postgres first or adjust ConnectionStrings__Postgres env var
-set ASPNETCORE_ENVIRONMENT=Development
+export ASPNETCORE_ENVIRONMENT=Development
 cd src/Easshas.WebApi
 dotnet run
 ```
 
-Apply EF migrations (suggested):
+Apply EF migrations:
 ```bash
-# install EF tools
- dotnet tool install --global dotnet-ef
-cd src/Easshas.WebApi
-# add migration
- dotnet ef migrations add Initial --project ..\Easshas.Infrastructure --startup-project . --context Easshas.Infrastructure.Persistence.AppDbContext
-# update db
- dotnet ef database update --project ..\Easshas.Infrastructure --startup-project . --context Easshas.Infrastructure.Persistence.AppDbContext
+# Install EF tools (once)
+dotnet tool install --global dotnet-ef
+
+# From the repository root
+dotnet ef migrations add Initial \
+  --project src/Easshas.Infrastructure \
+  --startup-project src/Easshas.WebApi \
+  --context Easshas.Infrastructure.Persistence.AppDbContext
+
+dotnet ef database update \
+  --project src/Easshas.Infrastructure \
+  --startup-project src/Easshas.WebApi \
+  --context Easshas.Infrastructure.Persistence.AppDbContext
+```
+
+## Ubuntu Server Deployment
+
+### Prerequisites on the server
+```bash
+# Install Docker Engine
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+
+# Allow running docker without sudo (re-login after)
+sudo usermod -aG docker $USER
+
+# Install nginx + certbot for HTTPS
+sudo apt-get install -y nginx certbot python3-certbot-nginx
+```
+
+### Deploy with the provided script
+```bash
+# Clone the repo on the server
+git clone https://github.com/JosiahObajeOgakor/EesshasEcommerceBackendRepository.git
+cd EesshasEcommerceBackendRepository
+
+# Create your .env file and fill in all CHANGE_ME values
+cp .env.example .env
+nano .env
+
+# Run the deploy script
+bash deploy.sh
+```
+
+The script will:
+1. Validate that `.env` exists and warn about un-replaced placeholders.
+2. Build the Docker image and start `db` + `api` containers.
+3. Wait for PostgreSQL to be healthy before the API connects.
+4. Optionally install the nginx reverse proxy config and obtain a TLS certificate via Certbot.
+
+### Manual nginx setup
+```bash
+sudo cp nginx/easshas.conf /etc/nginx/sites-available/easshas
+sudo sed -i 's/your-domain.com/eeshasgloss.com/g' /etc/nginx/sites-available/easshas
+sudo ln -s /etc/nginx/sites-available/easshas /etc/nginx/sites-enabled/easshas
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d eeshasgloss.com
+```
+
+### Updating the deployment
+```bash
+git pull --ff-only
+docker compose up --build -d
 ```
 
 ## Configuration
 
-Key settings (appsettings.json):
-- ConnectionStrings:Postgres
-- Jwt: Key (256-bit), Issuer, Audience, CookieName
-- Paystack: SecretKey (live in prod)
-- Paystack:Subscriptions: SecretKey (separate secret for admin monthly plan)
-- Email: From, Admin
-- Email: SesSecretName (optional Secrets Manager name containing { AccessKeyId, SecretAccessKey, Region })
-- WhatsApp: Enabled, AdminPhone (and provider credentials when added)
-- AWS: Region
-- Admin: Username, Password (for seeding)
+All secrets **must** be provided via environment variables (`.env` file) — never commit real secrets to source control.
+See `.env.example` for the full list. Key variables:
+
+| Variable | Description |
+|---|---|
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | PostgreSQL container credentials |
+| `CONNECTIONSTRINGS_POSTGRES` | Full Npgsql connection string for the API |
+| `JWT_KEY` | 256-bit secret key for JWT signing |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | Your domain (e.g. `https://eeshasgloss.com`) |
+| `PAYSTACK_SECRET_KEY` | Live Paystack secret (`sk_live_...`) |
+| `EMAIL_FROM` / `EMAIL_ADMIN` | Sender addresses |
+| `EMAIL_SMTP_*` | SMTP host/port/username/password |
+| `CORS_ORIGIN_0` | Primary allowed CORS origin |
+| `AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | AWS credentials |
+| `OPENAI_API_KEY` | OpenAI API key for AI features |
 
 ## Auth Endpoints
 - POST /api/auth/signup { username, password, email }
@@ -72,20 +141,19 @@ Key settings (appsettings.json):
 - PUT /api/admin/products/{id} (Admin)
 
 Example Product Payload:
-```
+```json
 {
   "name": "Blush Choco",
   "price": 4500,
   "category": "lipgloss",
-  "description": "Decription:",
+  "description": "Description",
   "brandName": "Brand Name"
 }
 ```
 
 ## Order + Payment
 - POST /api/orders
-Request:
-```
+```json
 {
   "productId": "<guid>",
   "quantity": 1,
@@ -99,30 +167,22 @@ Request:
   "phoneNumber": "+2348000000000",
   "expectedDeliveryDate": "2026-01-30",
   "emailForPayment": "buyer@example.com",
-  "callbackUrl": "https://yourapp/callback"  
+  "callbackUrl": "https://yourapp/callback"
 }
 ```
 Response: `{ orderId, amount, currency, authorizationUrl, reference }`
 
 - GET /api/payments/paystack/callback?reference=...&trxref=...&redirect=https://yourapp/payment/result
-  - Verifies payment, marks order paid (deducts inventory), and sends emails/WhatsApp.
-  - Redirects to `redirect` (or configured Payment.ReturnUrlSuccess/Failure) with `status` and `reference` query params.
 - POST /api/payments/verify { reference, redirect? }
-  - Frontend-driven verification when using pure frontend redirects; marks paid and sends notifications; optional redirect.
 - GET /api/orders/status?reference=...
-  - Anonymous polling endpoint for the frontend “Processing” page; returns `{ orderId, status, totalAmount, currency, createdAt, paidAt }`.
-- POST /api/webhooks/paystack (set in Paystack Dashboard)
-  - Validates `x-paystack-signature` (HMAC-SHA512 with your secret), processes `charge.success` idempotently, marks order paid and emails buyer/admin.
+- POST /api/webhooks/paystack — validates `x-paystack-signature`, processes `charge.success`
 
 ## Contacts (Validation)
 - Unified endpoint: `/api/contacts`
-  - POST body `{ phone? , email? }` (provide exactly one)
-  - GET query `?phone=...` or `?email=...` (provide exactly one)
-  - PATCH body `{ phone? , email? }` (provide exactly one)
-  - DELETE query `?phone=...` or `?email=...` (provide exactly one)
-- Rules:
-  - Phone: E.164 format only (e.g., `+2348012345678`)
-  - Email: Valid format, recognized provider domain, and not disposable (configurable via `Email.RecognizedProviders` and `Email.DisposableDomains`).
+  - POST/PATCH body `{ phone?, email? }` — provide exactly one
+  - GET/DELETE query `?phone=...` or `?email=...` — provide exactly one
+- Phone: E.164 format only (e.g. `+2348012345678`)
+- Email: valid format, recognised provider domain, not disposable
 
 ## Real-time Tracking
 - Client connects to SignalR hub `/hubs/tracking`
@@ -131,30 +191,18 @@ Response: `{ orderId, amount, currency, authorizationUrl, reference }`
 - Clients receive `location` events
 
 ## WhatsApp Notifications (Premium)
-- Admin subscribes via POST /api/admin/subscriptions/init (NGN 50k/month). Optional verify via POST /api/admin/subscriptions/verify?reference=...
-- On order payment, if WhatsApp.Enabled=true and subscription active, notifier sends messages to user/admin (provider integration stubbed).
+- Admin subscribes via POST /api/admin/subscriptions/init (NGN 50k/month)
+- On order payment, if `WhatsApp__Enabled=true` and subscription active, notifier sends messages
 
 ## Security Notes
-- Never use public (pk_) key as SecretKey. Use your Paystack live secret key (sk_live_...).
-- Configure webhooks with your server URL and verify x-paystack-signature.
-- Prefer webhook as canonical source of truth; callback/verify are user-experience helpers.
+- Never use the public key (`pk_`) as the secret key. Use `sk_live_...`.
+- Configure Paystack webhooks and verify `x-paystack-signature`.
+- All secrets are injected via environment variables — see `.env.example`.
+- HTTPS is enforced in production; cookies are Secure and SameSite=None.
 
 ## AWS Deployment (Overview)
-- Build Docker image for WebApi
-- Push to ECR
+- Build Docker image and push to ECR
 - Provision RDS PostgreSQL
-- Store secrets in AWS Secrets Manager (DB, Paystack, JWT key)
+- Store secrets in AWS Secrets Manager
 - Deploy on ECS Fargate or Elastic Beanstalk (Docker)
 - Configure ALB with HTTPS, forward to container port 8080
-- Set env vars:
-  - ConnectionStrings__Postgres
-  - Jwt__Key/Issuer/Audience/CookieName
-  - Paystack__SecretKey
-  - Email__From, Email__Admin
-  - AWS__Region
-  - Admin__Username, Admin__Password, Admin__Email (optional)
-
-## Notes
-- Ensure HTTPS is enforced in production; cookies are Secure and SameSite=None by default.
-- Use Paystack webhooks in addition to callback for robust reconciliation.
-- Consider adding refresh tokens for long-lived sessions if needed.

@@ -1,8 +1,9 @@
 # Build stage
+# Build context must be set to the repository root (e.g. docker-compose context: .)
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY ../.. ./
+COPY . ./
 RUN dotnet restore EasshasBackend.sln
 RUN dotnet publish src/Easshas.WebApi/Easshas.WebApi.csproj -c Release -o /app/publish /p:UseAppHost=false
 
