@@ -1,0 +1,34 @@
+[Unit]
+Description=Easshas E-Commerce Backend API
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+# Run as a dedicated non-root user for security
+User=easshas
+Group=easshas
+WorkingDirectory=/opt/easshas/api
+
+# Load secrets from an environment file that is NOT committed to source control.
+# Create /etc/easshas/environment by copying .env.example and filling in real values.
+EnvironmentFile=/etc/easshas/environment
+
+# The binary published by `dotnet publish -c Release`
+ExecStart=/opt/easshas/api/Easshas.WebApi
+
+# Listen on port 5000 (Nginx will proxy 80/443 → 5000)
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+# Automatically restart on failure
+Restart=always
+RestartSec=10
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

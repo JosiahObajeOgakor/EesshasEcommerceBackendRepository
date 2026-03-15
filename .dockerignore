@@ -1,0 +1,31 @@
+# Exclude build artefacts – the Dockerfile will restore/publish inside the container
+**/bin/
+**/obj/
+
+# IDE / tooling directories
+.vs/
+.vscode/
+.idea/
+
+# Local secrets – never bake into the image
+.env
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.tmp
+*.cache
+
+# Git metadata
+.git/
+.gitignore
+
+# Documentation / scripts that are not needed at runtime
+README.md
+scripts/
+nginx/
+ZohoTestDir/
+verify.json
