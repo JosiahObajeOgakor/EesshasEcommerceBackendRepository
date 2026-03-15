@@ -1,0 +1,109 @@
+name: Build, Test & Deploy to Ubuntu
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  PUBLISH_DIR: /tmp/easshas-publish
+
+jobs:
+  # ── Build & Test ────────────────────────────────────────────────────────────
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore EasshasBackend.sln
+
+      - name: Build solution
+        run: dotnet build EasshasBackend.sln --no-restore -c Release
+
+      - name: Run tests
+        run: dotnet test src/Easshas.Tests --no-build -c Release --verbosity normal
+
+      - name: Publish WebApi
+        run: dotnet publish src/Easshas.WebApi -c Release -o ${{ env.PUBLISH_DIR }} /p:UseAppHost=false
+
+      - name: Upload published artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easshas-api
+          path: ${{ env.PUBLISH_DIR }}
+          retention-days: 7
+
+  # ── Deploy (only on push to main) ───────────────────────────────────────────
+  deploy:
+    name: Deploy to Ubuntu Server
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download published artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: easshas-api
+          path: ${{ env.PUBLISH_DIR }}
+
+      # ── Copy files to server ──────────────────────────────────────────────
+      # Required GitHub Secrets:
+      #   SSH_HOST          – IP address or hostname of the Ubuntu server
+      #   SSH_USER          – SSH user with sudo rights (e.g. ubuntu or deploy)
+      #   SSH_PRIVATE_KEY   – Private key that matches an authorised_keys entry on the server
+      #   SSH_PORT          – (optional) SSH port, defaults to 22
+      - name: Copy artefact to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "${{ env.PUBLISH_DIR }}/*"
+          target: /tmp/easshas-deploy
+          strip_components: 3   # removes the /tmp/easshas-publish prefix
+
+      # ── Run migration + restart service on server ─────────────────────────
+      - name: Apply migrations & restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            APP_DIR=/opt/easshas/api
+            DEPLOY_DIR=/tmp/easshas-deploy
+
+            echo "==> Stopping service …"
+            sudo systemctl stop easshas-api || true
+
+            echo "==> Deploying new build …"
+            sudo rsync -a --delete "$DEPLOY_DIR/" "$APP_DIR/"
+            sudo chown -R easshas:easshas "$APP_DIR"
+
+            echo "==> Starting service …"
+            sudo systemctl start easshas-api
+            sudo systemctl status easshas-api --no-pager
+
+            echo "==> Cleaning up …"
+            rm -rf "$DEPLOY_DIR"

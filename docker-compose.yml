@@ -13,22 +13,25 @@ services:
       - pgdata:/var/lib/postgresql/data
   api:
     build:
-      context: ./src/Easshas.WebApi
-      dockerfile: Dockerfile
+      # Build context is the repository root so the multi-stage Dockerfile can
+      # access the full solution (EasshasBackend.sln + all src/ projects).
+      context: .
+      dockerfile: src/Easshas.WebApi/Dockerfile
     container_name: easshas_api
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: ${CONNECTIONSTRINGS_POSTGRES}
-      Jwt__Key: ${JWT_KEY}
-      Jwt__Issuer: ${JWT_ISSUER}
-      Jwt__Audience: ${JWT_AUDIENCE}
-      Paystack__SecretKey: ${PAYSTACK_SECRET_KEY}
-      AWS__Region: ${AWS_REGION}
-      AWS__AccessKey: ${AWS_ACCESS_KEY_ID}
-      AWS__SecretKey: ${AWS_SECRET_ACCESS_KEY}
-      App__AI__ApiKey: ${OPENAI_API_KEY}
-      Email__From: ${EMAIL_FROM}
-      Email__Admin: ${EMAIL_ADMIN}
+      ConnectionStrings__Postgres: ${ConnectionStrings__Postgres}
+      Jwt__Key: ${Jwt__Key}
+      Jwt__Issuer: ${Jwt__Issuer}
+      Jwt__Audience: ${Jwt__Audience}
+      Paystack__SecretKey: ${Paystack__SecretKey}
+      AWS__Region: ${AWS__Region}
+      AWS__AccessKey: ${AWS__AccessKey}
+      AWS__SecretKey: ${AWS__SecretKey}
+      App__AI__ApiKey: ${App__AI__ApiKey}
+      Email__From: ${Email__From}
+      Email__Admin: ${Email__Admin}
+      Email__Smtp__Password: ${Email__Smtp__Password}
     depends_on:
       - db
     ports:
