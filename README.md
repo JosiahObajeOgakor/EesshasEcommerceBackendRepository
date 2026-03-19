@@ -171,6 +171,7 @@ GitHub Actions deployment (no local AWS CLI needed):
 - Trigger: push to `main` or manual run (`workflow_dispatch`)
 - Required repository variables:
   - `AWS_REGION`
+  - `AWS_ROLE_TO_ASSUME` (optional, recommended for GitHub OIDC instead of static deploy keys)
   - `ECR_REPOSITORY`
   - `ECS_CLUSTER`
   - `ECS_SERVICE`
@@ -184,8 +185,8 @@ GitHub Actions deployment (no local AWS CLI needed):
   - `APP_CPU` (optional, default `512`)
   - `APP_MEMORY` (optional, default `1024`)
 - Required repository secrets:
-  - `AWS_ACCESS_KEY_ID`
-  - `AWS_SECRET_ACCESS_KEY`
+  - `AWS_ACCESS_KEY_ID` (required only when `AWS_ROLE_TO_ASSUME` is not set)
+  - `AWS_SECRET_ACCESS_KEY` (required only when `AWS_ROLE_TO_ASSUME` is not set)
   - `CONNECTIONSTRINGS_POSTGRES`
   - `JWT_KEY`
   - `JWT_ISSUER`
@@ -197,6 +198,12 @@ GitHub Actions deployment (no local AWS CLI needed):
   - `AWS_SECRET_KEY_APP`
   - `EMAIL_FROM`
   - `EMAIL_ADMIN`
+- Recommended production flow:
+  - Create an ECR repository, ECS cluster, ECS service security group, and an Application Load Balancer in the same VPC as RDS.
+  - Allow the ECS service security group to reach PostgreSQL on the RDS security group.
+  - Point the ALB target group to container port `8080` and use the ALB DNS name or your custom domain for `/swagger`.
+  - Prefer GitHub OIDC by creating an IAM role trusted by `token.actions.githubusercontent.com` and store that role ARN in `AWS_ROLE_TO_ASSUME`.
+  - Push to `main` to trigger image build, ECR push, ECS task registration, and service rollout.
 
 ## Notes
 - Ensure HTTPS is enforced in production; cookies are Secure and SameSite=None by default.

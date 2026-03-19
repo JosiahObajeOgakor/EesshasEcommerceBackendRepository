@@ -11,9 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
       ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
       ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
       ECS_SERVICE: ${{ vars.ECS_SERVICE }}
@@ -31,27 +33,68 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Validate required workflow variables
+      - name: Validate required workflow configuration
+        env:
+          AWS_ACCESS_KEY_ID_SECRET: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          CONNECTIONSTRINGS_POSTGRES_SECRET: ${{ secrets.CONNECTIONSTRINGS_POSTGRES }}
+          JWT_KEY_SECRET: ${{ secrets.JWT_KEY }}
+          JWT_ISSUER_SECRET: ${{ secrets.JWT_ISSUER }}
+          JWT_AUDIENCE_SECRET: ${{ secrets.JWT_AUDIENCE }}
+          PAYSTACK_SECRET_KEY_SECRET: ${{ secrets.PAYSTACK_SECRET_KEY }}
+          OPENAI_API_KEY_SECRET: ${{ secrets.OPENAI_API_KEY }}
+          AWS_REGION_APP_SECRET: ${{ secrets.AWS_REGION_APP }}
+          AWS_ACCESS_KEY_APP_SECRET: ${{ secrets.AWS_ACCESS_KEY_APP }}
+          AWS_SECRET_KEY_APP_SECRET: ${{ secrets.AWS_SECRET_KEY_APP }}
+          EMAIL_FROM_SECRET: ${{ secrets.EMAIL_FROM }}
+          EMAIL_ADMIN_SECRET: ${{ secrets.EMAIL_ADMIN }}
         run: |
           set -euo pipefail
           missing=0
+
           for key in AWS_REGION ECR_REPOSITORY ECS_CLUSTER ECS_SERVICE ECS_TASK_FAMILY ECS_EXECUTION_ROLE_ARN ECS_SUBNETS ECS_SECURITY_GROUPS CONTAINER_NAME; do
             if [ -z "${!key:-}" ]; then
               echo "Missing repository variable: $key"
               missing=1
             fi
           done
+
+          for key in CONNECTIONSTRINGS_POSTGRES_SECRET JWT_KEY_SECRET JWT_ISSUER_SECRET JWT_AUDIENCE_SECRET PAYSTACK_SECRET_KEY_SECRET OPENAI_API_KEY_SECRET AWS_REGION_APP_SECRET AWS_ACCESS_KEY_APP_SECRET AWS_SECRET_KEY_APP_SECRET EMAIL_FROM_SECRET EMAIL_ADMIN_SECRET; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing repository secret: ${key%_SECRET}"
+              missing=1
+            fi
+          done
+
+          if [ -z "${AWS_ROLE_TO_ASSUME:-}" ]; then
+            for key in AWS_ACCESS_KEY_ID_SECRET AWS_SECRET_ACCESS_KEY_SECRET; do
+              if [ -z "${!key:-}" ]; then
+                echo "Missing repository secret: ${key%_SECRET}"
+                missing=1
+              fi
+            done
+          fi
+
           if [ "$missing" -eq 1 ]; then
-            echo "Set required repository variables under Settings > Secrets and variables > Actions > Variables"
+            echo "Set required repository variables and secrets under Settings > Secrets and variables > Actions."
             exit 1
           fi
+
+      - name: Configure AWS credentials with OIDC
+        if: ${{ env.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-easshas-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials with access keys
+        if: ${{ env.AWS_ROLE_TO_ASSUME == '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
