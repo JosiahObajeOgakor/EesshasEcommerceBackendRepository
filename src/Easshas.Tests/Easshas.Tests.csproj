@@ -8,14 +8,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.5" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.2.5" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Easshas.Infrastructure\Easshas.Infrastructure.csproj" />
     <ProjectReference Include="..\Easshas.Application\Easshas.Application.csproj" />
     <ProjectReference Include="..\Easshas.WebApi\Easshas.WebApi.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="AWSSDK.Core" Version="4.0.3.12" />
   </ItemGroup>
 </Project>

@@ -113,6 +113,7 @@ Response: `{ orderId, amount, currency, authorizationUrl, reference }`
   - Anonymous polling endpoint for the frontend “Processing” page; returns `{ orderId, status, totalAmount, currency, createdAt, paidAt }`.
 - POST /api/webhooks/paystack (set in Paystack Dashboard)
   - Validates `x-paystack-signature` (HMAC-SHA512 with your secret), processes `charge.success` idempotently, marks order paid and emails buyer/admin.
+  - Legacy alias also supported: POST /api/payments/webhook
 
 ## Contacts (Validation)
 - Unified endpoint: `/api/contacts`
@@ -153,6 +154,49 @@ Response: `{ orderId, amount, currency, authorizationUrl, reference }`
   - Email__From, Email__Admin
   - AWS__Region
   - Admin__Username, Admin__Password, Admin__Email (optional)
+
+Quick ECS Fargate deployment script:
+```powershell
+./scripts/deploy_aws_fargate.ps1 \
+  -AccountId <aws-account-id> \
+  -Region us-east-1 \
+  -TaskExecutionRoleArn arn:aws:iam::<aws-account-id>:role/ecsTaskExecutionRole \
+  -Subnets subnet-abc123,subnet-def456 \
+  -SecurityGroups sg-abc123 \
+  -AssignPublicIp
+```
+
+GitHub Actions deployment (no local AWS CLI needed):
+- Workflow: `.github/workflows/deploy-ecs.yml`
+- Trigger: push to `main` or manual run (`workflow_dispatch`)
+- Required repository variables:
+  - `AWS_REGION`
+  - `ECR_REPOSITORY`
+  - `ECS_CLUSTER`
+  - `ECS_SERVICE`
+  - `ECS_TASK_FAMILY`
+  - `ECS_EXECUTION_ROLE_ARN`
+  - `ECS_TASK_ROLE_ARN` (optional)
+  - `ECS_SUBNETS` (comma-separated)
+  - `ECS_SECURITY_GROUPS` (comma-separated)
+  - `ECS_ASSIGN_PUBLIC_IP` (`ENABLED` or `DISABLED`)
+  - `CONTAINER_NAME` (example: `easshas-api`)
+  - `APP_CPU` (optional, default `512`)
+  - `APP_MEMORY` (optional, default `1024`)
+- Required repository secrets:
+  - `AWS_ACCESS_KEY_ID`
+  - `AWS_SECRET_ACCESS_KEY`
+  - `CONNECTIONSTRINGS_POSTGRES`
+  - `JWT_KEY`
+  - `JWT_ISSUER`
+  - `JWT_AUDIENCE`
+  - `PAYSTACK_SECRET_KEY`
+  - `OPENAI_API_KEY`
+  - `AWS_REGION_APP`
+  - `AWS_ACCESS_KEY_APP`
+  - `AWS_SECRET_KEY_APP`
+  - `EMAIL_FROM`
+  - `EMAIL_ADMIN`
 
 ## Notes
 - Ensure HTTPS is enforced in production; cookies are Secure and SameSite=None by default.

@@ -14,6 +14,7 @@ namespace Easshas.WebApi.Controllers
 {
     [ApiController]
     [Route("api/webhooks/paystack")]
+    [Route("api/payments/webhook")]
     public class WebhooksController : ControllerBase
     {
         private readonly IConfiguration _configuration;
