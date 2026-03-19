@@ -140,61 +140,73 @@ jobs:
           EMAIL_ADMIN: ${{ secrets.EMAIL_ADMIN }}
         run: |
           set -euo pipefail
+          python - << 'PY'
+          import json
+          import os
 
-          TASK_ROLE_JSON=""
-          if [ -n "${ECS_TASK_ROLE_ARN:-}" ]; then
-            TASK_ROLE_JSON=",\"taskRoleArn\":\"$ECS_TASK_ROLE_ARN\""
-          fi
+          family = os.environ["ECS_TASK_FAMILY"]
+          cpu = os.environ.get("APP_CPU") or "512"
+          memory = os.environ.get("APP_MEMORY") or "1024"
+          execution_role = os.environ["ECS_EXECUTION_ROLE_ARN"]
+          task_role = os.environ.get("ECS_TASK_ROLE_ARN") or ""
+          container_name = os.environ["CONTAINER_NAME"]
+          image = os.environ["IMAGE_URI"]
+          ecs_service = os.environ["ECS_SERVICE"]
+          aws_region = os.environ["AWS_REGION"]
 
-          APP_CPU_VAL="${APP_CPU:-512}"
-          APP_MEMORY_VAL="${APP_MEMORY:-1024}"
+          env_vars = [
+            {"name": "ASPNETCORE_ENVIRONMENT", "value": "Production"},
+            {"name": "ConnectionStrings__Postgres", "value": os.environ["CONNECTIONSTRINGS_POSTGRES"]},
+            {"name": "Jwt__Key", "value": os.environ["JWT_KEY"]},
+            {"name": "Jwt__Issuer", "value": os.environ["JWT_ISSUER"]},
+            {"name": "Jwt__Audience", "value": os.environ["JWT_AUDIENCE"]},
+            {"name": "Paystack__SecretKey", "value": os.environ["PAYSTACK_SECRET_KEY"]},
+            {"name": "App__AI__ApiKey", "value": os.environ["OPENAI_API_KEY"]},
+            {"name": "AWS__Region", "value": os.environ["AWS_REGION_APP"]},
+            {"name": "AWS__AccessKey", "value": os.environ["AWS_ACCESS_KEY_APP"]},
+            {"name": "AWS__SecretKey", "value": os.environ["AWS_SECRET_KEY_APP"]},
+            {"name": "Email__From", "value": os.environ["EMAIL_FROM"]},
+            {"name": "Email__Admin", "value": os.environ["EMAIL_ADMIN"]},
+          ]
 
-          cat > task-definition.json <<EOF
-          {
-            "family": "$ECS_TASK_FAMILY",
+          task_def = {
+            "family": family,
             "networkMode": "awsvpc",
             "requiresCompatibilities": ["FARGATE"],
-            "cpu": "$APP_CPU_VAL",
-            "memory": "$APP_MEMORY_VAL",
-            "executionRoleArn": "$ECS_EXECUTION_ROLE_ARN"$TASK_ROLE_JSON,
+            "cpu": str(cpu),
+            "memory": str(memory),
+            "executionRoleArn": execution_role,
             "containerDefinitions": [
               {
-                "name": "$CONTAINER_NAME",
-                "image": "$IMAGE_URI",
-                "essential": true,
+                "name": container_name,
+                "image": image,
+                "essential": True,
                 "portMappings": [
                   {
                     "containerPort": 8080,
                     "hostPort": 8080,
-                    "protocol": "tcp"
+                    "protocol": "tcp",
                   }
                 ],
-                "environment": [
-                  { "name": "ASPNETCORE_ENVIRONMENT", "value": "Production" },
-                  { "name": "ConnectionStrings__Postgres", "value": "$CONNECTIONSTRINGS_POSTGRES" },
-                  { "name": "Jwt__Key", "value": "$JWT_KEY" },
-                  { "name": "Jwt__Issuer", "value": "$JWT_ISSUER" },
-                  { "name": "Jwt__Audience", "value": "$JWT_AUDIENCE" },
-                  { "name": "Paystack__SecretKey", "value": "$PAYSTACK_SECRET_KEY" },
-                  { "name": "App__AI__ApiKey", "value": "$OPENAI_API_KEY" },
-                  { "name": "AWS__Region", "value": "$AWS_REGION_APP" },
-                  { "name": "AWS__AccessKey", "value": "$AWS_ACCESS_KEY_APP" },
-                  { "name": "AWS__SecretKey", "value": "$AWS_SECRET_KEY_APP" },
-                  { "name": "Email__From", "value": "$EMAIL_FROM" },
-                  { "name": "Email__Admin", "value": "$EMAIL_ADMIN" }
-                ],
+                "environment": env_vars,
                 "logConfiguration": {
                   "logDriver": "awslogs",
                   "options": {
-                    "awslogs-group": "/ecs/$ECS_SERVICE",
-                    "awslogs-region": "$AWS_REGION",
-                    "awslogs-stream-prefix": "ecs"
-                  }
-                }
+                    "awslogs-group": f"/ecs/{ecs_service}",
+                    "awslogs-region": aws_region,
+                    "awslogs-stream-prefix": "ecs",
+                  },
+                },
               }
-            ]
+            ],
           }
-          EOF
+
+          if task_role:
+            task_def["taskRoleArn"] = task_role
+
+          with open("task-definition.json", "w", encoding="utf-8") as f:
+            json.dump(task_def, f)
+          PY
 
           TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
           echo "task_definition_arn=$TASK_DEF_ARN" >> "$GITHUB_OUTPUT"
