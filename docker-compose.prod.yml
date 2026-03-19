@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/Easshas.WebApi/Dockerfile
+    container_name: easshas_api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: ${CONNECTIONSTRINGS_POSTGRES}
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Paystack__SecretKey: ${PAYSTACK_SECRET_KEY}
+      AWS__Region: ${AWS_REGION}
+      AWS__AccessKey: ${AWS_ACCESS_KEY_ID}
+      AWS__SecretKey: ${AWS_SECRET_ACCESS_KEY}
+      App__AI__ApiKey: ${OPENAI_API_KEY}
+      Email__From: ${EMAIL_FROM}
+      Email__Admin: ${EMAIL_ADMIN}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
