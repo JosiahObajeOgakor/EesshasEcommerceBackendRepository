@@ -182,8 +182,10 @@ GitHub Actions deployment (no local AWS CLI needed):
   - `ECS_SECURITY_GROUPS` (comma-separated)
   - `ECS_ASSIGN_PUBLIC_IP` (`ENABLED` or `DISABLED`)
   - `CONTAINER_NAME` (example: `easshas-api`)
+  - `APP_CONTAINER_PORT` (optional, default `8080`)
   - `APP_CPU` (optional, default `512`)
   - `APP_MEMORY` (optional, default `1024`)
+  - `ALB_TARGET_GROUP_ARN` (optional, required if you want the workflow to attach the ECS service to an ALB target group)
 - Required repository secrets:
   - `AWS_ACCESS_KEY_ID` (required only when `AWS_ROLE_TO_ASSUME` is not set)
   - `AWS_SECRET_ACCESS_KEY` (required only when `AWS_ROLE_TO_ASSUME` is not set)
