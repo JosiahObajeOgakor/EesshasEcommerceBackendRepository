@@ -295,11 +295,14 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseSwagger();
+app.UseSwaggerUI();
+
+app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-
     // Lightweight route inspection to debug 404s in dev
     app.MapGet("/__routes", (IEnumerable<Microsoft.AspNetCore.Routing.EndpointDataSource> sources) =>
     {
@@ -328,9 +331,6 @@ if (app.Environment.IsDevelopment())
         var epAfter = ctx.GetEndpoint()?.DisplayName ?? "(no endpoint)";
         Console.WriteLine($"RES {ctx.Response.StatusCode} {ctx.Request.Method} {ctx.Request.Path} -> {epAfter}");
     });
-
-    // Redirect root to Swagger UI for convenience in Development
-    app.MapGet("/", () => Results.Redirect("/swagger"));
 }
 
 // Enforce cookie policy for secure credentials
