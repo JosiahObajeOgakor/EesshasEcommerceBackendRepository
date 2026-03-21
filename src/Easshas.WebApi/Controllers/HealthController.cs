@@ -8,7 +8,7 @@ using Microsoft.Extensions.Hosting;
 namespace Easshas.WebApi.Controllers
 {
     [ApiController]
-    [Route("api/health")]
+    [Route("/health")]
     [AllowAnonymous]
     public class HealthController : ControllerBase
     {
